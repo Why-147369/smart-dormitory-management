@@ -28,6 +28,9 @@ uploads/
 .DS_Store
 Thumbs.db
 
+# 开发文档
+.trae/
+
 # 日志
 *.log
 hs_err_pid*

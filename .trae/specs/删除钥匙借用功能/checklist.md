@@ -1,6 +1,0 @@
-- [x] KeyBorrow.java 实体类已删除
-- [x] KeyBorrowMapper.java 已删除
-- [x] KeyBorrowController.java 已删除
-- [x] 数据库 SQL 文件中 key_borrow 表已删除
-- [x] ER 图中钥匙借用相关实体已移除
-- [x] 功能描述文档中钥匙借用相关内容已更新

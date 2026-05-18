@@ -1,0 +1,575 @@
+-- =====================================================
+-- 智能宿舍管理系统 - 数据库设计
+-- 数据库名: dormitory_system
+-- 作者: 
+-- 日期: 2026-02-13
+-- =====================================================
+
+-- 创建数据库
+CREATE DATABASE IF NOT EXISTS dormitory_system DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+USE dormitory_system;
+create table admin
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    username    varchar(50)                        not null comment '用户名',
+    password    varchar(100)                       not null comment '密码(MD5加密)',
+    name        varchar(50)                        not null comment '姓名',
+    phone       varchar(20)                        null comment '联系电话',
+    avatar      longtext                           null,
+    status      tinyint  default 1                 null comment '状态: 0-禁用, 1-正常',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint username
+        unique (username)
+)
+    comment '管理员表' charset = utf8mb4;
+
+create table bed
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    room_id     bigint                             not null comment '所属宿舍ID',
+    bed_number  int                                not null comment '床位号',
+    student_id  bigint                             null comment '占用学生ID',
+    status      tinyint  default 0                 null comment '状态: 0-空闲, 1-占用, 2-维修中, 3-损坏待修',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint uk_room_bed
+        unique (room_id, bed_number)
+)
+    comment '床位表' charset = utf8mb4;
+
+create index idx_bed_room
+    on bed (room_id);
+
+create index idx_bed_student
+    on bed (student_id);
+
+create table building
+(
+    id              bigint auto_increment comment '主键ID'
+        primary key,
+    building_name   varchar(50)                        not null comment '楼栋名称',
+    building_number varchar(20)                        not null comment '楼栋编号',
+    floor_count     int                                not null comment '楼层数',
+    room_count      int                                not null comment '房间数',
+    manager_id      bigint                             null comment '宿管员ID',
+    create_time     datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint building_number
+        unique (building_number)
+)
+    comment '宿舍楼表' charset = utf8mb4;
+
+create table chat_message
+(
+    id              bigint auto_increment comment '主键ID'
+        primary key,
+    session_id      bigint                             not null comment '会话ID',
+    sender_type     tinyint                            not null comment '发送者类型: 1-学生, 2-AI, 3-管理员',
+    sender_id       bigint                             not null comment '发送者ID',
+    message_content text                               not null comment '消息内容',
+    create_time     datetime default CURRENT_TIMESTAMP null comment '创建时间'
+)
+    comment '客服消息表' charset = utf8mb4;
+
+create index idx_chat_message_session
+    on chat_message (session_id);
+
+create table chat_session
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    student_id  bigint                             not null comment '学生ID',
+    chat_type   tinyint                            not null comment '聊天类型: 1-AI客服, 2-人工客服',
+    status      tinyint  default 0                 null comment '状态: 0-进行中, 1-已结束',
+    admin_id    bigint                             null comment '管理员ID(人工客服时)',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    end_time    datetime                           null comment '结束时间'
+)
+    comment '客服会话表' charset = utf8mb4;
+
+create index idx_chat_session_student
+    on chat_session (student_id);
+
+create table check_in
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    student_id  bigint                             not null comment '学生ID',
+    check_date  date                               not null comment '打卡日期',
+    check_time  time                               not null comment '打卡时间',
+    status      tinyint  default 1                 null comment '状态: 0-补卡, 1-正常',
+    is_late     tinyint  default 0                 null comment '是否晚归: 0-否, 1-是',
+    remark      varchar(200)                       null comment '备注',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    constraint uk_student_date
+        unique (student_id, check_date)
+)
+    comment '打卡记录表' charset = utf8mb4;
+
+create index idx_checkin_date
+    on check_in (check_date);
+
+create index idx_checkin_student
+    on check_in (student_id);
+
+create table check_in_apply
+(
+    id            bigint auto_increment comment '主键ID'
+        primary key,
+    student_id    bigint                             not null comment '学生ID',
+    apply_date    date                               not null comment '申请补卡日期',
+    reason        varchar(500)                       not null comment '申请原因',
+    status        tinyint  default 0                 null comment '状态: 0-待审批, 1-已通过, 2-已驳回',
+    manager_id    bigint                             null comment '审批人ID',
+    reject_reason varchar(200)                       null comment '驳回原因',
+    create_time   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '补打卡申请表' charset = utf8mb4;
+
+create table check_in_setting
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    building_id bigint                             null comment '楼栋ID(为空表示全局设置)',
+    start_time  time                               not null comment '开始时间',
+    end_time    time                               not null comment '结束时间',
+    is_enabled  tinyint  default 1                 null comment '是否启用',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '打卡设置表' charset = utf8mb4;
+
+create table check_out
+(
+    id            bigint auto_increment comment '主键ID'
+        primary key,
+    student_id    bigint                             not null comment '申请学生ID',
+    room_id       bigint                             not null comment '宿舍ID',
+    bed_id        bigint                             not null comment '床位ID',
+    reason        varchar(500)                       not null comment '退寝原因',
+    expected_date date                               not null comment '预计退寝时间',
+    status        tinyint  default 0                 null comment '状态: 0-待审批, 1-已通过, 2-已驳回, 3-已办理',
+    approver_id   bigint                             null comment '审批人ID',
+    approve_time  datetime                           null comment '审批时间',
+    reject_reason varchar(200)                       null comment '驳回原因',
+    asset_check   varchar(500)                       null comment '资产清点结果',
+    create_time   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '退寝申请表' charset = utf8mb4;
+
+create table civilized_dormitory
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    room_id     bigint                             not null comment '宿舍ID',
+    year        int                                not null comment '年份',
+    month       int                                not null comment '月份',
+    total_score decimal(5, 2)                      not null comment '月度总分',
+    `rank`      int                                null comment '排名',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    constraint uk_room_year_month
+        unique (room_id, year, month)
+)
+    comment '文明宿舍排行榜表' charset = utf8mb4;
+
+create index idx_civilized_room
+    on civilized_dormitory (room_id);
+
+create index idx_civilized_year_month
+    on civilized_dormitory (year, month);
+
+create table dormitory_manager
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    username    varchar(50)                        not null comment '用户名',
+    password    varchar(100)                       not null comment '密码(MD5加密)',
+    name        varchar(50)                        not null comment '姓名',
+    gender      tinyint                            not null comment '性别: 0-女, 1-男',
+    phone       varchar(20)                        null comment '联系电话',
+    avatar      longtext                           null,
+    building_id bigint                             not null comment '负责楼栋ID',
+    status      tinyint  default 1                 null comment '状态: 0-禁用, 1-正常',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint username
+        unique (username)
+)
+    comment '宿管员表' charset = utf8mb4;
+
+create index idx_manager_building
+    on dormitory_manager (building_id);
+
+create table dormitory_rule
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    building_id bigint                             null comment '所属楼栋ID(为空表示全校通用)',
+    title       varchar(100)                       not null comment '标题',
+    content     text                               not null comment '内容',
+    rule_type   tinyint                            not null comment '类型: 1-宿舍公约, 2-特殊规定, 3-违规处罚',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '宿舍公约表' charset = utf8mb4;
+
+create table emergency_help
+(
+    id            bigint auto_increment comment '主键ID'
+        primary key,
+    student_id    bigint                             not null comment '发起学生ID',
+    room_id       bigint                             not null comment '宿舍ID',
+    content       varchar(500)                       null comment '求助内容',
+    status        tinyint  default 0                 null comment '状态: 0-已发送, 1-已接收, 2-处理中, 3-已解决',
+    handle_time   datetime                           null comment '处理时间',
+    handle_remark varchar(200)                       null comment '处理备注',
+    create_time   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '紧急求助记录表' charset = utf8mb4;
+
+create table health_check
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    room_id     bigint                             not null comment '宿舍ID',
+    manager_id  bigint                             not null comment '检查人ID',
+    score       int                                not null comment '打分(1-10分)',
+    description varchar(500)                       null comment '问题描述',
+    images      longtext                           null comment '现场照片(JSON数组)',
+    check_date  date                               not null comment '检查日期',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间'
+)
+    comment '卫生检查记录表' charset = utf8mb4;
+
+create table login_log
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    user_id     bigint                             not null comment '用户ID',
+    user_type   tinyint                            not null comment '用户类型: 1-学生, 2-宿管员, 3-管理员',
+    username    varchar(50)                        not null comment '登录用户名',
+    login_time  datetime                           not null comment '登录时间',
+    ip_address  varchar(50)                        null comment 'IP地址',
+    device_info varchar(200)                       null comment '设备信息',
+    status      tinyint  default 1                 null comment '登录状态: 0-失败, 1-成功',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间'
+)
+    comment '登录日志表' charset = utf8mb4;
+
+create index idx_login_log_time
+    on login_log (login_time);
+
+create index idx_login_log_user
+    on login_log (user_id);
+
+create table lost_and_found
+(
+    id           bigint auto_increment comment '主键ID'
+        primary key,
+    type         tinyint                            not null comment '类型: 1-失物, 2-拾物',
+    item_name    varchar(100)                       not null comment '物品名称',
+    item_type    varchar(50)                        null comment '物品类型',
+    lost_time    datetime                           null comment '丢失/拾取时间',
+    lost_place   varchar(100)                       null comment '丢失/拾取地点',
+    description  varchar(500)                       null comment '物品描述',
+    contact      varchar(50)                        null comment '联系方式',
+    images       longtext                           null,
+    status       tinyint  default 0                 null comment '状态: 0-待认领, 1-已找到',
+    publisher_id bigint                             not null comment '发布人ID',
+    create_time  datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '失物招领表' charset = utf8mb4;
+
+create table maintenance_person
+(
+    id              bigint auto_increment comment '主键ID'
+        primary key,
+    name            varchar(50)                        not null comment '姓名',
+    phone           varchar(20)                        null comment '联系电话',
+    specialty       varchar(100)                       null comment '擅长维修类型（水电/门窗/网络等）',
+    status          tinyint  default 1                 null comment '状态: 0-禁用, 1-正常',
+    create_time     datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    username        varchar(50)                        null comment '登录账号',
+    password        varchar(100)                       null comment '密码(BCrypt加密)',
+    last_login_time datetime                           null comment '最后登录时间'
+)
+    comment '维修人员表' charset = utf8mb4;
+
+create table message
+(
+    id           bigint auto_increment comment '主键ID'
+        primary key,
+    user_id      bigint                             not null comment '接收用户ID',
+    user_type    tinyint                            not null comment '用户类型: 1-学生, 2-宿管员, 3-管理员',
+    title        varchar(100)                       not null comment '消息标题',
+    content      text                               not null comment '消息内容',
+    message_type varchar(30)                        null comment '消息类型',
+    is_read      tinyint  default 0                 null comment '是否已读: 0-未读, 1-已读',
+    related_id   bigint                             null comment '关联业务ID',
+    create_time  datetime default CURRENT_TIMESTAMP null comment '创建时间'
+)
+    comment '消息通知表' charset = utf8mb4;
+
+create index idx_message_is_read
+    on message (is_read);
+
+create index idx_message_user
+    on message (user_id, user_type);
+
+create table notice
+(
+    id           bigint auto_increment comment '主键ID'
+        primary key,
+    title        varchar(100)                       not null comment '公告标题',
+    content      text                               not null comment '公告内容',
+    notice_type  varchar(30)                        null comment '公告类型',
+    is_top       tinyint  default 0                 null comment '是否置顶: 0-否, 1-是',
+    publisher_id bigint                             not null comment '发布人ID',
+    create_time  datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '系统公告表' charset = utf8mb4;
+
+create table operation_log
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    user_id     bigint                             not null comment '操作人ID',
+    user_type   tinyint                            not null comment '用户类型: 1-学生, 2-宿管员, 3-管理员',
+    operation   varchar(50)                        not null comment '操作内容',
+    ip          varchar(50)                        null comment 'IP地址',
+    method      varchar(200)                       null comment '请求方法',
+    params      text                               null comment '请求参数',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间'
+)
+    comment '操作日志表' charset = utf8mb4;
+
+create table repair
+(
+    id             bigint auto_increment comment '主键ID'
+        primary key,
+    repair_number  varchar(30)                        not null comment '报修单号',
+    student_id     bigint                             not null comment '报修学生ID',
+    room_id        bigint                             not null comment '报修宿舍ID',
+    type_id        bigint                             not null comment '报修类型ID',
+    title          varchar(100)                       not null comment '报修标题',
+    description    text                               null comment '故障描述',
+    images         longtext                           null comment '现场照片(JSON数组)',
+    is_emergency   tinyint  default 0                 null comment '是否紧急: 0-普通, 1-紧急',
+    status         tinyint  default 0                 null comment '状态: 0-待处理, 1-已接单, 2-维修中, 3-已完成, 4-已取消',
+    handler_id     bigint                             null comment '处理人ID(宿管员)',
+    repair_person  varchar(50)                        null comment '维修人员姓名',
+    handle_remark  varchar(500)                       null comment '处理备注',
+    create_time    datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    maintenance_id bigint                             null comment '维修人员ID',
+    accept_time    datetime                           null comment '维修人员接单时间',
+    constraint repair_number
+        unique (repair_number)
+)
+    comment '报修单表' charset = utf8mb4;
+
+create index idx_repair_create_time
+    on repair (create_time);
+
+create index idx_repair_room
+    on repair (room_id);
+
+create index idx_repair_status
+    on repair (status);
+
+create index idx_repair_student
+    on repair (student_id);
+
+create table repair_comment
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    repair_id   bigint                             not null comment '报修单ID',
+    student_id  bigint                             not null comment '评价学生ID',
+    rating      tinyint                            not null comment '满意度: 1-不满意, 2-一般, 3-满意',
+    content     text                               null comment '评价内容',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间'
+)
+    comment '报修评价表' charset = utf8mb4;
+
+create table repair_type
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    type_name   varchar(50)                        not null comment '类型名称',
+    type_icon   varchar(100)                       null comment '类型图标',
+    sort_order  int      default 0                 null comment '排序',
+    status      tinyint  default 1                 null comment '状态: 0-禁用, 1-启用',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '报修类型表' charset = utf8mb4;
+
+create table room
+(
+    id            bigint auto_increment comment '主键ID'
+        primary key,
+    building_id   bigint                             not null comment '所属楼栋ID',
+    room_number   varchar(20)                        not null comment '房间号',
+    floor         int                                not null comment '所在楼层',
+    room_type     tinyint                            not null comment '房间类型: 4-4人间, 6-6人间',
+    bed_count     int                                not null comment '床位总数',
+    current_count int      default 0                 null comment '当前入住人数',
+    status        tinyint  default 1                 null comment '状态: 0-不可用, 1-可用',
+    create_time   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint uk_building_room
+        unique (building_id, room_number)
+)
+    comment '宿舍表' charset = utf8mb4;
+
+create index idx_room_building
+    on room (building_id);
+
+create table room_change
+(
+    id              bigint auto_increment comment '主键ID'
+        primary key,
+    student_id      bigint                             not null comment '申请学生ID',
+    current_room_id bigint                             not null comment '当前宿舍ID',
+    current_bed_id  bigint                             not null comment '当前床位ID',
+    target_room_id  bigint                             not null comment '目标宿舍ID',
+    target_bed_id   bigint                             not null comment '目标床位ID',
+    change_type     tinyint                            not null comment '换寝类型: 1-楼内换寝',
+    reason          varchar(500)                       not null comment '换寝原因',
+    status          tinyint  default 0                 null comment '状态: 0-待审批, 1-已通过, 2-已驳回, 3-已取消',
+    approver_id     bigint                             null comment '审批人ID',
+    approve_time    datetime                           null comment '审批时间',
+    reject_reason   varchar(200)                       null comment '驳回原因',
+    create_time     datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '换寝申请表' charset = utf8mb4;
+
+create table student
+(
+    id             bigint auto_increment comment '主键ID'
+        primary key,
+    student_number varchar(20)                        not null comment '学号',
+    password       varchar(100)                       not null comment '密码(MD5加密)',
+    name           varchar(50)                        not null comment '姓名',
+    gender         tinyint                            not null comment '性别: 0-女, 1-男',
+    college        varchar(100)                       null comment '学院',
+    major          varchar(100)                       null comment '专业',
+    class_name     varchar(50)                        null comment '班级',
+    phone          varchar(20)                        null comment '联系电话',
+    avatar         longtext                           null,
+    building_id    bigint                             null comment '当前所在楼栋ID',
+    room_id        bigint                             null comment '当前所在宿舍ID',
+    bed_number     int                                null comment '床位号',
+    status         tinyint  default 1                 null comment '状态: 0-禁用, 1-正常',
+    create_time    datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint student_number
+        unique (student_number)
+)
+    comment '学生表' charset = utf8mb4;
+
+create index idx_student_building
+    on student (building_id);
+
+create index idx_student_number
+    on student (student_number);
+
+create index idx_student_room
+    on student (room_id);
+
+create table utility_bill
+(
+    id               bigint auto_increment comment '主键ID'
+        primary key,
+    room_id          bigint                             not null comment '宿舍ID',
+    year             int                                not null comment '年份',
+    month            int                                not null comment '月份',
+    electric_usage   decimal(10, 2)                     not null comment '用电量(度)',
+    water_usage      decimal(10, 2)                     not null comment '用水量(吨)',
+    electric_fee     decimal(10, 2)                     not null comment '电费(元)',
+    water_fee        decimal(10, 2)                     not null comment '水费(元)',
+    total_fee        decimal(10, 2)                     not null comment '总费用(元)',
+    is_paid          tinyint  default 0                 null comment '是否已支付: 0-未支付, 1-已支付',
+    pay_time         datetime                           null comment '支付时间',
+    pay_method       varchar(20)                        null comment '支付方式: wechat-微信, alipay-支付宝',
+    manager_id       bigint                             null comment '录入人ID',
+    is_water_over    tinyint  default 0                 null comment '用水是否超限: 0-未超限, 1-已超限',
+    is_electric_over tinyint  default 0                 null comment '用电是否超限: 0-未超限, 1-已超限',
+    create_time      datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time      datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint uk_room_year_month
+        unique (room_id, year, month)
+)
+    comment '水电费账单表' charset = utf8mb4;
+
+create index idx_bill_room
+    on utility_bill (room_id);
+
+create index idx_bill_year_month
+    on utility_bill (year, month);
+
+create table utility_threshold
+(
+    id             bigint auto_increment comment '主键ID'
+        primary key,
+    room_type      tinyint                                  not null comment '房间类型: 4-4人间, 6-6人间',
+    electric_limit decimal(10, 2)                           not null comment '用电量阈值(度)',
+    water_limit    decimal(10, 2)                           not null comment '用水量阈值(吨)',
+    electric_price decimal(10, 2) default 0.60              null comment '电价(元/度)',
+    water_price    decimal(10, 2) default 2.00              null comment '水价(元/吨)',
+    create_time    datetime       default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time    datetime       default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '水电费设置表' charset = utf8mb4;
+
+create table utility_warning
+(
+    id               bigint auto_increment
+        primary key,
+    room_id          bigint                             null,
+    building_id      bigint                             null,
+    year             int                                null,
+    month            int                                null,
+    water_usage      decimal(10, 2)                     null,
+    water_limit      decimal(10, 2)                     null,
+    electric_usage   decimal(10, 2)                     null,
+    electric_limit   decimal(10, 2)                     null,
+    is_water_over    tinyint  default 0                 null,
+    is_electric_over tinyint  default 0                 null,
+    status           tinyint  default 0                 null comment '0:未处理 1:已处理',
+    create_time      datetime default CURRENT_TIMESTAMP null
+)
+    charset = utf8mb4;
+
+create table visitor
+(
+    id            bigint auto_increment comment '主键ID'
+        primary key,
+    student_id    bigint                             not null comment '预约学生ID',
+    visitor_name  varchar(50)                        not null comment '访客姓名',
+    gender        tinyint                            not null comment '性别: 0-女, 1-男',
+    phone         varchar(20)                        not null comment '联系电话',
+    source        varchar(100)                       null comment '来源地',
+    visit_time    datetime                           not null comment '到访时间',
+    purpose       varchar(200)                       null comment '到访目的',
+    status        tinyint  default 0                 null comment '状态: 0-待审批, 1-已通过, 2-已驳回, 3-已完成, 4-已取消',
+    approver_id   bigint                             null comment '审批人ID',
+    reject_reason varchar(200)                       null comment '驳回原因',
+    create_time   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '访客预约表' charset = utf8mb4;
+

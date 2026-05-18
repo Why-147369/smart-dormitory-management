@@ -1,0 +1,12 @@
+application.yml
+target/
+*.class
+*.jar
+node_modules/
+dist/
+.idea/
+*.iml
+.vscode/
+uploads/
+.DS_Store
+Thumbs.db

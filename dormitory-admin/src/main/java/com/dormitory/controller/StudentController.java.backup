@@ -1,0 +1,524 @@
+package com.dormitory.controller;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.dormitory.common.Constant;
+import com.dormitory.common.Result;
+import com.dormitory.entity.*;
+import com.dormitory.mapper.*;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/student")
+public class StudentController {
+
+    private Long getBedIdByStudentId(List<Bed> beds, Long studentId) {
+        for (Bed bed : beds) {
+            if (bed.getStudentId() != null && bed.getStudentId().equals(studentId)) {
+                return bed.getId();
+            }
+        }
+        return null;
+    }
+
+    private final StudentMapper studentMapper;
+    private final RoomMapper roomMapper;
+    private final BuildingMapper buildingMapper;
+    private final BedMapper bedMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final DormitoryManagerMapper dormitoryManagerMapper;
+
+    public StudentController(StudentMapper studentMapper, RoomMapper roomMapper,
+                            BuildingMapper buildingMapper, BedMapper bedMapper,
+                            PasswordEncoder passwordEncoder,
+                            DormitoryManagerMapper dormitoryManagerMapper) {
+        this.studentMapper = studentMapper;
+        this.roomMapper = roomMapper;
+        this.buildingMapper = buildingMapper;
+        this.bedMapper = bedMapper;
+        this.passwordEncoder = passwordEncoder;
+        this.dormitoryManagerMapper = dormitoryManagerMapper;
+    }
+
+    @GetMapping("/{id}")
+    public Result<Map<String, Object>> getById(@PathVariable Long id) {
+        Student student = studentMapper.selectById(id);
+        if (student == null) {
+            return Result.error("学生不存在");
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", student.getId());
+        result.put("studentNumber", student.getStudentNumber());
+        result.put("name", student.getName());
+        result.put("gender", student.getGender());
+        result.put("college", student.getCollege());
+        result.put("major", student.getMajor());
+        result.put("className", student.getClassName());
+        result.put("phone", student.getPhone());
+        result.put("avatar", student.getAvatar());
+        result.put("buildingId", student.getBuildingId());
+        result.put("roomId", student.getRoomId());
+        result.put("bedNumber", student.getBedNumber());
+        
+        if (student.getRoomId() != null) {
+            Room room = roomMapper.selectById(student.getRoomId());
+            if (room != null) {
+                result.put("roomNumber", room.getRoomNumber());
+                if (room.getBuildingId() != null) {
+                    Building building = buildingMapper.selectById(room.getBuildingId());
+                    if (building != null) {
+                        result.put("buildingName", building.getBuildingName());
+                    }
+                }
+            }
+        }
+        
+        return Result.success(result);
+    }
+
+    @GetMapping("/info/{id}")
+    public Result<Object> getInfo(@PathVariable Long id) {
+        Student student = studentMapper.selectById(id);
+        if (student == null) {
+            return Result.error("学生不存在");
+        }
+
+        Room room = null;
+        Building building = null;
+        List<Student> roommates = null;
+
+        if (student.getRoomId() != null) {
+            room = roomMapper.selectById(student.getRoomId());
+            if (room != null) {
+                building = buildingMapper.selectById(room.getBuildingId());
+
+                LambdaQueryWrapper<Student> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(Student::getRoomId, student.getRoomId());
+                wrapper.ne(Student::getId, student.getId());
+                roommates = studentMapper.selectList(wrapper);
+            }
+        }
+
+        return Result.success(java.util.Map.of(
+                "student", student,
+                "room", room,
+                "building", building,
+                "roommates", roommates
+        ));
+    }
+
+    @PutMapping("/update")
+    public Result<Void> update(@RequestBody Student student) {
+        studentMapper.updateById(student);
+        return Result.success();
+    }
+
+    @GetMapping("/list")
+    public Result<IPage<Map<String, Object>>> list(@RequestParam(defaultValue = "1") Integer pageNum,
+                                      @RequestParam(defaultValue = "10") Integer pageSize,
+                                      @RequestParam(required = false) Long buildingId,
+                                      @RequestParam(required = false) String keyword) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userIdStr = authentication.getPrincipal().toString();
+        Long userId = Long.parseLong(userIdStr);
+        Integer userType = (Integer) authentication.getDetails();
+        
+        Long managerBuildingId = buildingId;
+        if (userType == 2 && managerBuildingId == null) {
+            DormitoryManager manager = dormitoryManagerMapper.selectById(userId);
+            if (manager != null) {
+                managerBuildingId = manager.getBuildingId();
+            }
+        }
+        
+        Page<Student> page = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<Student> wrapper = new LambdaQueryWrapper<>();
+        if (managerBuildingId != null) {
+            wrapper.eq(Student::getBuildingId, managerBuildingId);
+        }
+        if (keyword != null && !keyword.isEmpty()) {
+            wrapper.and(w -> w.like(Student::getName, keyword)
+                    .or().like(Student::getStudentNumber, keyword)
+                    .or().like(Student::getClassName, keyword)
+                    .or().like(Student::getCollege, keyword)
+                    .or().like(Student::getMajor, keyword));
+        }
+        Page<Student> result = studentMapper.selectPage(page, wrapper);
+        
+        List<Bed> allBeds = bedMapper.selectList(null);
+        Map<Long, Map<String, Object>> studentBedInfo = new HashMap<>();
+        for (Bed bed : allBeds) {
+            if (bed.getStudentId() != null) {
+                Room room = roomMapper.selectById(bed.getRoomId());
+                if (room != null) {
+                    Map<String, Object> info = new HashMap<>();
+                    info.put("roomId", room.getId());
+                    info.put("roomNumber", room.getRoomNumber());
+                    info.put("bedNumber", bed.getBedNumber());
+                    Building building = buildingMapper.selectById(room.getBuildingId());
+                    if (building != null) {
+                        info.put("buildingName", building.getBuildingName());
+                    }
+                    studentBedInfo.put(bed.getStudentId(), info);
+                }
+            }
+        }
+        
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (Student s : result.getRecords()) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", s.getId());
+            map.put("name", s.getName());
+            map.put("studentNumber", s.getStudentNumber());
+            map.put("gender", s.getGender());
+            map.put("phone", s.getPhone());
+            map.put("college", s.getCollege());
+            map.put("major", s.getMajor());
+            map.put("className", s.getClassName());
+            map.put("status", s.getStatus());
+            map.put("createTime", s.getCreateTime());
+            
+            if (s.getBuildingId() != null) {
+                Building building = buildingMapper.selectById(s.getBuildingId());
+                if (building != null) {
+                    map.put("buildingName", building.getBuildingName());
+                }
+            }
+            
+            Map<String, Object> bedInfo = studentBedInfo.get(s.getId());
+            if (bedInfo != null) {
+                map.put("roomNumber", bedInfo.get("roomNumber"));
+                map.put("bedNumber", bedInfo.get("bedNumber"));
+                map.put("bedId", getBedIdByStudentId(allBeds, s.getId()));
+            } else {
+                map.put("roomNumber", null);
+                map.put("bedNumber", null);
+                map.put("bedId", null);
+            }
+            
+            records.add(map);
+        }
+        
+        IPage<Map<String, Object>> resultPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        resultPage.setRecords(records);
+        return Result.success(resultPage);
+    }
+
+    @PostMapping
+    public Result<Void> add(@RequestBody Student student) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userIdStr = authentication.getPrincipal().toString();
+        Long userId = Long.parseLong(userIdStr);
+        Integer userType = (Integer) authentication.getDetails();
+        
+        if (userType == 2) {
+            DormitoryManager manager = dormitoryManagerMapper.selectById(userId);
+            if (manager != null && manager.getBuildingId() != null) {
+                student.setBuildingId(manager.getBuildingId());
+            }
+        }
+        
+        student.setStatus(Constant.STATUS_NORMAL);
+        if (student.getPassword() != null && !student.getPassword().isEmpty()) {
+            student.setPassword(passwordEncoder.encode(student.getPassword()));
+        } else {
+            student.setPassword(passwordEncoder.encode("123456"));
+        }
+        studentMapper.insert(student);
+        return Result.success();
+    }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        studentMapper.deleteById(id);
+        return Result.success();
+    }
+
+    @PostMapping("/batch-delete")
+    public Result<Void> batchDelete(@RequestBody List<Long> ids) {
+        studentMapper.deleteBatchIds(ids);
+        return Result.success();
+    }
+
+    @GetMapping("/building/{buildingId}")
+    public Result<List<Student>> getByBuildingId(@PathVariable Long buildingId) {
+        LambdaQueryWrapper<Student> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Student::getBuildingId, buildingId);
+        List<Student> students = studentMapper.selectList(wrapper);
+        students.forEach(s -> s.setPassword(null));
+        return Result.success(students);
+    }
+
+    @PostMapping("/import")
+    public Result<Void> importStudents(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            return Result.error("文件为空");
+        }
+        
+        try {
+            InputStream inputStream = file.getInputStream();
+            Workbook workbook = new XSSFWorkbook(inputStream);
+            Sheet sheet = workbook.getSheetAt(0);
+            
+            List<Student> students = new ArrayList<>();
+            
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+                
+                Cell cell0 = row.getCell(0);
+                Cell cell1 = row.getCell(1);
+                Cell cell2 = row.getCell(2);
+                Cell cell3 = row.getCell(3);
+                Cell cell4 = row.getCell(4);
+                Cell cell5 = row.getCell(5);
+                Cell cell6 = row.getCell(6);
+                
+                if (cell0 == null || getCellValue(cell0).isEmpty()) continue;
+                
+                Student student = new Student();
+                student.setStudentNumber(getCellValue(cell0));
+                student.setName(getCellValue(cell1));
+                
+                String genderStr = getCellValue(cell2);
+                if ("男".equals(genderStr)) {
+                    student.setGender(1);
+                } else if ("女".equals(genderStr)) {
+                    student.setGender(0);
+                }
+                
+                student.setPhone(getCellValue(cell3));
+                student.setCollege(getCellValue(cell4));
+                student.setMajor(getCellValue(cell5));
+                student.setClassName(getCellValue(cell6));
+                student.setStatus(Constant.STATUS_NORMAL);
+                student.setPassword(passwordEncoder.encode("123456"));
+                
+                students.add(student);
+            }
+            
+            workbook.close();
+            inputStream.close();
+            
+            if (!students.isEmpty()) {
+                for (Student student : students) {
+                    studentMapper.insert(student);
+                }
+            }
+            
+            return Result.success();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("导入失败: " + e.getMessage());
+        }
+    }
+    
+    private String getCellValue(Cell cell) {
+        if (cell == null) return "";
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue().trim();
+            case NUMERIC:
+                return String.valueOf((long) cell.getNumericCellValue());
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            default:
+                return "";
+        }
+    }
+    
+    @GetMapping("/export")
+    public void exportStudents(HttpServletResponse response) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String userIdStr = authentication.getPrincipal().toString();
+            Long userId = Long.parseLong(userIdStr);
+            Integer userType = (Integer) authentication.getDetails();
+            
+            LambdaQueryWrapper<Student> wrapper = new LambdaQueryWrapper<>();
+            if (userType == 2) {
+                DormitoryManager manager = dormitoryManagerMapper.selectById(userId);
+                if (manager != null && manager.getBuildingId() != null) {
+                    wrapper.eq(Student::getBuildingId, manager.getBuildingId());
+                }
+            }
+            
+            List<Student> students = studentMapper.selectList(wrapper);
+            
+            List<Bed> allBeds = bedMapper.selectList(null);
+            Map<Long, Map<String, Object>> studentBedInfo = new HashMap<>();
+            for (Bed bed : allBeds) {
+                if (bed.getStudentId() != null) {
+                    Room room = roomMapper.selectById(bed.getRoomId());
+                    if (room != null) {
+                        Map<String, Object> info = new HashMap<>();
+                        info.put("roomNumber", room.getRoomNumber());
+                        info.put("bedNumber", bed.getBedNumber());
+                        Building building = buildingMapper.selectById(room.getBuildingId());
+                        if (building != null) {
+                            info.put("buildingName", building.getBuildingName());
+                        }
+                        studentBedInfo.put(bed.getStudentId(), info);
+                    }
+                }
+            }
+            
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("学生信息");
+            
+            Row headerRow = sheet.createRow(0);
+            headerRow.createCell(0).setCellValue("学号");
+            headerRow.createCell(1).setCellValue("姓名");
+            headerRow.createCell(2).setCellValue("性别");
+            headerRow.createCell(3).setCellValue("学院");
+            headerRow.createCell(4).setCellValue("专业");
+            headerRow.createCell(5).setCellValue("班级");
+            headerRow.createCell(6).setCellValue("电话");
+            headerRow.createCell(7).setCellValue("楼栋");
+            headerRow.createCell(8).setCellValue("宿舍号");
+            headerRow.createCell(9).setCellValue("床位号");
+            headerRow.createCell(10).setCellValue("状态");
+            
+            int rowNum = 1;
+            for (Student student : students) {
+                Row row = sheet.createRow(rowNum++);
+                row.createCell(0).setCellValue(student.getStudentNumber());
+                row.createCell(1).setCellValue(student.getName());
+                row.createCell(2).setCellValue(student.getGender() == 1 ? "男" : "女");
+                row.createCell(3).setCellValue(student.getCollege());
+                row.createCell(4).setCellValue(student.getMajor());
+                row.createCell(5).setCellValue(student.getClassName());
+                row.createCell(6).setCellValue(student.getPhone());
+                
+                Map<String, Object> bedInfo = studentBedInfo.get(student.getId());
+                if (bedInfo != null) {
+                    row.createCell(7).setCellValue(bedInfo.get("buildingName") != null ? bedInfo.get("buildingName").toString() : "");
+                    row.createCell(8).setCellValue(bedInfo.get("roomNumber") != null ? bedInfo.get("roomNumber").toString() : "");
+                    row.createCell(9).setCellValue(bedInfo.get("bedNumber") != null ? bedInfo.get("bedNumber").toString() : "");
+                } else {
+                    row.createCell(7).setCellValue("");
+                    row.createCell(8).setCellValue("");
+                    row.createCell(9).setCellValue("");
+                }
+                
+                row.createCell(10).setCellValue(student.getStatus() == 1 ? "在校" : "离校");
+            }
+            
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            response.setHeader("Content-Disposition", "attachment;filename=students.xlsx");
+            workbook.write(response.getOutputStream());
+            workbook.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @GetMapping("/me")
+    public Result<Map<String, Object>> getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long userId = (Long) authentication.getPrincipal();
+        Student student = studentMapper.selectById(userId);
+        if (student == null) {
+            return Result.error("学生不存在");
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", student.getId());
+        result.put("studentNumber", student.getStudentNumber());
+        result.put("name", student.getName());
+        result.put("gender", student.getGender());
+        result.put("college", student.getCollege());
+        result.put("major", student.getMajor());
+        result.put("className", student.getClassName());
+        result.put("phone", student.getPhone());
+        result.put("avatar", student.getAvatar());
+        result.put("buildingId", student.getBuildingId());
+        result.put("roomId", student.getRoomId());
+        result.put("bedNumber", student.getBedNumber());
+        
+        if (student.getRoomId() != null) {
+            Room room = roomMapper.selectById(student.getRoomId());
+            if (room != null) {
+                result.put("roomNumber", room.getRoomNumber());
+                if (room.getBuildingId() != null) {
+                    Building building = buildingMapper.selectById(room.getBuildingId());
+                    if (building != null) {
+                        result.put("buildingName", building.getBuildingName());
+                    }
+                }
+            }
+        }
+        
+        if (student.getBedNumber() != null) {
+            LambdaQueryWrapper<Bed> bedWrapper = new LambdaQueryWrapper<>();
+            bedWrapper.eq(Bed::getStudentId, student.getId());
+            Bed bed = bedMapper.selectOne(bedWrapper);
+            if (bed != null) {
+                result.put("bedNumber", bed.getBedNumber());
+            }
+        }
+        
+        return Result.success(result);
+    }
+
+    @PutMapping("/profile")
+    public Result<Void> updateProfile(@RequestBody Map<String, Object> params) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long userId = (Long) authentication.getPrincipal();
+        Student student = studentMapper.selectById(userId);
+        if (student == null) {
+            return Result.error("学生不存在");
+        }
+        
+        if (params.containsKey("name")) {
+            student.setName((String) params.get("name"));
+        }
+        if (params.containsKey("phone")) {
+            student.setPhone((String) params.get("phone"));
+        }
+        if (params.containsKey("avatar")) {
+            student.setAvatar((String) params.get("avatar"));
+        }
+        
+        studentMapper.updateById(student);
+        return Result.success();
+    }
+
+    @PutMapping("/password")
+    public Result<Void> changePassword(@RequestBody Map<String, String> params) {
+        String oldPassword = params.get("oldPassword");
+        String newPassword = params.get("newPassword");
+        
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long userId = (Long) authentication.getPrincipal();
+        Student student = studentMapper.selectById(userId);
+        if (student == null) {
+            return Result.error("学生不存在");
+        }
+        
+        if (!passwordEncoder.matches(oldPassword, student.getPassword())) {
+            return Result.error("原密码错误");
+        }
+        
+        student.setPassword(passwordEncoder.encode(newPassword));
+        studentMapper.updateById(student);
+        return Result.success();
+    }
+}

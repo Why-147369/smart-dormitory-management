@@ -1,0 +1,28 @@
+{
+  "name": "dormitory-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vueuse/core": "10.7",
+    "axios": "1.6",
+    "dayjs": "1.11",
+    "echarts": "5.4",
+    "element-plus": "2.5",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.25",
+    "vue-router": "^4.6.4",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "esbuild": "^0.19.12",
+    "sass": "^1.97.3",
+    "vite": "^5.2.0"
+  }
+}

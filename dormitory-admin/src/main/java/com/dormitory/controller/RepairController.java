@@ -18,6 +18,8 @@ import com.dormitory.mapper.BedMapper;
 import com.dormitory.mapper.RoomMapper;
 import com.dormitory.mapper.BuildingMapper;
 import com.dormitory.mapper.MessageMapper;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -55,6 +57,7 @@ public class RepairController {
 
     /** 获取报修类型列表
      * @return 报修类型列表 */
+    @Cacheable(value = "repairTypeList")
     @GetMapping("/type/list")
     public Result<List<RepairType>> typeList() {
         LambdaQueryWrapper<RepairType> wrapper = new LambdaQueryWrapper<>();
@@ -345,6 +348,7 @@ public class RepairController {
     /** 添加报修类型
      * @param repairType 报修类型信息
      * @return 操作结果 */
+    @CacheEvict(value = "repairTypeList", allEntries = true)
     @PostMapping("/type")
     public Result<Void> addType(@RequestBody RepairType repairType) {
         repairType.setStatus(Constant.STATUS_NORMAL);
@@ -359,6 +363,7 @@ public class RepairController {
      * @param id 报修类型ID
      * @param repairType 报修类型信息
      * @return 操作结果 */
+    @CacheEvict(value = "repairTypeList", allEntries = true)
     @PutMapping("/type/{id}")
     public Result<Void> updateType(@PathVariable Long id, @RequestBody RepairType repairType) {
         repairType.setId(id);
@@ -369,6 +374,7 @@ public class RepairController {
     /** 删除报修类型
      * @param id 报修类型ID
      * @return 操作结果 */
+    @CacheEvict(value = "repairTypeList", allEntries = true)
     @DeleteMapping("/type/{id}")
     public Result<Void> deleteType(@PathVariable Long id) {
         repairTypeMapper.deleteById(id);

@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.dormitory.common.Result;
 import com.dormitory.entity.UtilityThreshold;
 import com.dormitory.mapper.UtilityThresholdMapper;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,6 +30,7 @@ public class UtilityThresholdController {
      * 获取所有水电费阈值配置列表
      * @return 阈值配置列表
      */
+    @Cacheable(value = "thresholdList")
     @GetMapping("/list")
     public Result<List<UtilityThreshold>> list() {
         List<UtilityThreshold> list = utilityThresholdMapper.selectList(null);
@@ -63,6 +66,7 @@ public class UtilityThresholdController {
      * @param threshold 阈值配置对象
      * @return 操作结果
      */
+    @CacheEvict(value = "thresholdList", allEntries = true)
     @PostMapping
     public Result<Void> add(@RequestBody UtilityThreshold threshold) {
         utilityThresholdMapper.insert(threshold);
@@ -74,6 +78,7 @@ public class UtilityThresholdController {
      * @param threshold 阈值配置对象
      * @return 操作结果
      */
+    @CacheEvict(value = "thresholdList", allEntries = true)
     @PutMapping
     public Result<Void> update(@RequestBody UtilityThreshold threshold) {
         utilityThresholdMapper.updateById(threshold);
@@ -85,6 +90,7 @@ public class UtilityThresholdController {
      * @param id 阈值配置ID
      * @return 操作结果
      */
+    @CacheEvict(value = "thresholdList", allEntries = true)
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         utilityThresholdMapper.deleteById(id);

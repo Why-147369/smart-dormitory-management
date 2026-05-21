@@ -7,6 +7,8 @@ import com.dormitory.entity.Building;
 import com.dormitory.entity.DormitoryManager;
 import com.dormitory.mapper.BuildingMapper;
 import com.dormitory.mapper.DormitoryManagerMapper;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -30,6 +32,7 @@ public class BuildingController {
 
     /** 获取楼栋列表，返回所有楼栋信息及对应的宿管信息
      * @return 包含楼栋和宿管信息的列表 */
+    @Cacheable(value = "buildingList")
     @GetMapping("/list")
     public Result<List<Map<String, Object>>> list() {
         List<Building> buildings = buildingMapper.selectList(null);
@@ -95,6 +98,7 @@ public class BuildingController {
     /** 添加新楼栋
      * @param building 楼栋信息
      * @return 操作结果 */
+    @CacheEvict(value = "buildingList", allEntries = true)
     @PostMapping
     public Result<Void> add(@RequestBody Building building) {
         if (building.getRoomCount() == null) {
@@ -110,6 +114,7 @@ public class BuildingController {
     /** 更新楼栋信息
      * @param building 楼栋信息
      * @return 操作结果 */
+    @CacheEvict(value = "buildingList", allEntries = true)
     @PutMapping
     public Result<Void> update(@RequestBody Building building) {
         buildingMapper.updateById(building);
@@ -119,6 +124,7 @@ public class BuildingController {
     /** 删除楼栋
      * @param id 楼栋ID
      * @return 操作结果 */
+    @CacheEvict(value = "buildingList", allEntries = true)
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         buildingMapper.deleteById(id);

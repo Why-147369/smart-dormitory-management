@@ -11,6 +11,8 @@ import com.dormitory.mapper.BuildingMapper;
 import com.dormitory.mapper.RoomMapper;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,6 +42,7 @@ public class RoomController {
      * @param pageNum 页码，默认1
      * @param pageSize 每页条数，默认100
      * @return 宿舍列表及总数 */
+    @Cacheable(value = "roomList")
     @GetMapping("/list")
     public Result<Map<String, Object>> list(@RequestParam(required = false) Long buildingId,
                                              @RequestParam(defaultValue = "1") Integer pageNum,
@@ -118,6 +121,7 @@ public class RoomController {
     /** 添加新宿舍
      * @param room 宿舍信息
      * @return 操作结果 */
+    @CacheEvict(value = "roomList", allEntries = true)
     @PostMapping
     public Result<Void> add(@RequestBody Room room) {
         if (room.getRoomType() == null) {
@@ -139,6 +143,7 @@ public class RoomController {
     /** 更新宿舍信息
      * @param room 宿舍信息
      * @return 操作结果 */
+    @CacheEvict(value = "roomList", allEntries = true)
     @PutMapping
     public Result<Void> update(@RequestBody Room room) {
         roomMapper.updateById(room);
@@ -148,6 +153,7 @@ public class RoomController {
     /** 删除宿舍
      * @param id 宿舍ID
      * @return 操作结果 */
+    @CacheEvict(value = "roomList", allEntries = true)
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         roomMapper.deleteById(id);
@@ -157,6 +163,7 @@ public class RoomController {
     /** 批量删除宿舍
      * @param ids 宿舍ID列表
      * @return 操作结果 */
+    @CacheEvict(value = "roomList", allEntries = true)
     @PostMapping("/batch-delete")
     public Result<Void> batchDelete(@RequestBody List<Long> ids) {
         roomMapper.deleteBatchIds(ids);
@@ -201,6 +208,7 @@ public class RoomController {
     /** 导入宿舍信息（从Excel文件批量导入）
      * @param file Excel文件
      * @return 操作结果 */
+    @CacheEvict(value = "roomList", allEntries = true)
     @PostMapping("/import")
     public Result<Void> importRooms(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {

@@ -10,6 +10,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -138,6 +140,7 @@ public class StudentController {
      * @param student 学生信息
      * @return 更新结果
      */
+    @CacheEvict(value = "studentList", allEntries = true)
     @PutMapping("/update")
     public Result<Void> update(@RequestBody Student student) {
         studentMapper.updateById(student);
@@ -157,6 +160,7 @@ public class StudentController {
   3. 批量查这些床位对应的房间（selectBatchIds）    → 1 次
   4. 批量查这些房间对应的楼栋（selectBatchIds）    → 1 次
      */
+    @Cacheable(value = "studentList", key = "#pageNum + '_' + #pageSize")
     @GetMapping("/list")
     public Result<IPage<Map<String, Object>>> list(@RequestParam(defaultValue = "1") Integer pageNum,
                                       @RequestParam(defaultValue = "10") Integer pageSize,
@@ -304,6 +308,7 @@ public class StudentController {
      * @param student 学生信息
      * @return 添加结果
      */
+    @CacheEvict(value = "studentList", allEntries = true)
     @PostMapping
     public Result<Void> add(@RequestBody Student student) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -334,6 +339,7 @@ public class StudentController {
      * @param id 学生ID
      * @return 删除结果
      */
+    @CacheEvict(value = "studentList", allEntries = true)
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         studentMapper.deleteById(id);
@@ -346,6 +352,7 @@ public class StudentController {
      * @param ids 学生ID列表
      * @return 删除结果
      */
+    @CacheEvict(value = "studentList", allEntries = true)
     @PostMapping("/batch-delete")
     public Result<Void> batchDelete(@RequestBody List<Long> ids) {
         studentMapper.deleteBatchIds(ids);
@@ -373,6 +380,7 @@ public class StudentController {
      * @param file Excel文件
      * @return 导入结果
      */
+    @CacheEvict(value = "studentList", allEntries = true)
     @PostMapping("/import")
     public Result<Void> importStudents(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {

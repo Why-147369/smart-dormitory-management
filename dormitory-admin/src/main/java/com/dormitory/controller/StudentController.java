@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -487,21 +488,55 @@ public class StudentController {
             }
             
             List<Student> students = studentMapper.selectList(wrapper);
-            
-            List<Bed> allBeds = bedMapper.selectList(null);
+
+            // 批量查询：只查当前学生关联的床位 → 房间 → 楼栋（避免 N+1）
             Map<Long, Map<String, Object>> studentBedInfo = new HashMap<>();
-            for (Bed bed : allBeds) {
-                if (bed.getStudentId() != null) {
-                    Room room = roomMapper.selectById(bed.getRoomId());
-                    if (room != null) {
-                        Map<String, Object> info = new HashMap<>();
-                        info.put("roomNumber", room.getRoomNumber());
-                        info.put("bedNumber", bed.getBedNumber());
-                        Building building = buildingMapper.selectById(room.getBuildingId());
-                        if (building != null) {
-                            info.put("buildingName", building.getBuildingName());
+            if (!students.isEmpty()) {
+                List<Long> studentIds = students.stream()
+                        .map(Student::getId)
+                        .collect(Collectors.toList());
+
+                List<Bed> relatedBeds = bedMapper.selectList(
+                        new LambdaQueryWrapper<Bed>().in(Bed::getStudentId, studentIds)
+                );
+
+                if (!relatedBeds.isEmpty()) {
+                    Set<Long> roomIds = relatedBeds.stream()
+                            .map(Bed::getRoomId)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet());
+                    Map<Long, Room> roomMap = new HashMap<>();
+                    if (!roomIds.isEmpty()) {
+                        for (Room r : roomMapper.selectBatchIds(roomIds)) {
+                            roomMap.put(r.getId(), r);
                         }
-                        studentBedInfo.put(bed.getStudentId(), info);
+                    }
+
+                    Set<Long> buildingIds = roomMap.values().stream()
+                            .map(Room::getBuildingId)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet());
+                    Map<Long, Building> buildingMap = new HashMap<>();
+                    if (!buildingIds.isEmpty()) {
+                        for (Building b : buildingMapper.selectBatchIds(buildingIds)) {
+                            buildingMap.put(b.getId(), b);
+                        }
+                    }
+
+                    for (Bed bed : relatedBeds) {
+                        if (bed.getStudentId() != null) {
+                            Room room = roomMap.get(bed.getRoomId());
+                            if (room != null) {
+                                Map<String, Object> info = new HashMap<>();
+                                info.put("roomNumber", room.getRoomNumber());
+                                info.put("bedNumber", bed.getBedNumber());
+                                Building building = buildingMap.get(room.getBuildingId());
+                                if (building != null) {
+                                    info.put("buildingName", building.getBuildingName());
+                                }
+                                studentBedInfo.put(bed.getStudentId(), info);
+                            }
+                        }
                     }
                 }
             }

@@ -1,6 +1,6 @@
 # 智能宿舍管理系统
 
-> Smart Dormitory Management System | 毕业设计 | 南昌交通学院
+> Smart Dormitory Management System | 毕业设计 
 
 基于 **Spring Boot + Vue 3** 的前后端分离智能宿舍管理系统，为学生、宿管员、管理员、维修人员四类角色提供宿舍管理全流程数字化服务。
 
